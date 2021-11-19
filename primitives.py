@@ -2,79 +2,79 @@ import torch
 import torch.distributions as tdist
 import distributions as dist
 
-def Normal(alpha, loc, scale, k):
-    return k(dist.Normal(loc.float(), scale.float()))
+def Normal(sigma, alpha, loc, scale, k):
+    return k(sigma, dist.Normal(loc.float(), scale.float()))
 
-def Bernoulli(alpha, probs, k):
-    return k(dist.Bernoulli(probs))
+def Bernoulli(sigma, alpha, probs, k):
+    return k(sigma, dist.Bernoulli(probs))
 
-def Categorical(alpha, probs, k):
-    return k(dist.Categorical(probs=probs))
+def Categorical(sigma, alpha, probs, k):
+    return k(sigma, dist.Categorical(probs=probs))
 
-def Dirichlet(alpha, concentration, k):
-    return k(dist.Dirichlet(concentration))
+def Dirichlet(sigma, alpha, concentration, k):
+    return k(sigma, dist.Dirichlet(concentration))
 
-def Gamma(alpha, concentration, rate, k):
-    return k(dist.Gamma(concentration, rate))
+def Gamma(sigma, alpha, concentration, rate, k):
+    return k(sigma, dist.Gamma(concentration, rate))
 
-def Beta(alpha, arg0, arg1, k):
-    return k(tdist.Beta(arg0, arg1))
+def Beta(sigma, alpha, arg0, arg1, k):
+    return k(sigma, tdist.Beta(arg0, arg1))
 
-def Exponential(alpha, rate, k):
-    return k(tdist.Exponential(rate))
+def Exponential(sigma, alpha, rate, k):
+    return k(sigma, tdist.Exponential(rate))
 
-def Uniform(alpha, hi, lo, k):
-    return k(tdist.Uniform(hi, lo))
-
-
-
-def sqrt(alpha, arg, k):
-    return k(torch.sqrt(arg.float()))
-
-def exp(alpha, arg, k):
-    return k(torch.exp(arg.float()))
-
-def log(alpha, arg, k):
-    return k(torch.log(arg.float()))
-
-def tanh(alpha, arg, k):
-    return k(torch.tanh(arg.float()))
-
-def add(alpha, a, b, k):
-    return k(torch.add(a, b))
-
-def mul(alpha, a, b, k):
-    return k(torch.mul(a,b))
-
-def div(alpha, a, b, k):
-    return k(torch.div(a,b))
-
-def sub(alpha, a, b, k):
-    return k(torch.sub(a,b))
-
-def gt(alpha, a, b, k):
-    return k(torch.gt(a, b))
-
-def lt(alpha, a, b, k):
-    return k(torch.lt(a,b))
+def Uniform(sigma, alpha, hi, lo, k):
+    return k(sigma, tdist.Uniform(hi, lo))
 
 
-def vector(alpha, *args):
+
+def sqrt(sigma, alpha, arg, k):
+    return k(sigma, torch.sqrt(arg.float()))
+
+def exp(sigma, alpha, arg, k):
+    return k(sigma, torch.exp(arg.float()))
+
+def log(sigma, alpha, arg, k):
+    return k(sigma, torch.log(arg.float()))
+
+def tanh(sigma, alpha, arg, k):
+    return k(sigma, torch.tanh(arg.float()))
+
+def add(sigma, alpha, a, b, k):
+    return k(sigma, torch.add(a, b))
+
+def mul(sigma, alpha, a, b, k):
+    return k(sigma, torch.mul(a,b))
+
+def div(sigma, alpha, a, b, k):
+    return k(sigma, torch.div(a,b))
+
+def sub(sigma, alpha, a, b, k):
+    return k(sigma, torch.sub(a,b))
+
+def gt(sigma, alpha, a, b, k):
+    return k(sigma, torch.gt(a, b))
+
+def lt(sigma, alpha, a, b, k):
+    return k(sigma, torch.lt(a,b))
+
+
+def vector(sigma, alpha, *args):
     k = args[-1]
     args = args[:-1]
     if len(args) == 0:
-        return k(torch.tensor([]))
+        return k(sigma, torch.tensor([]))
     elif type(args[0]) is torch.Tensor:
         try:
             output = torch.stack(args) #stack works for 1D, but also ND
         except Exception:
             output = list(args) #NOTE:  that these are NOT persistent
-        return k(output)
+        return k(sigma, output)
     else:
-        return k(list(args)) #this is for probability distributions
+        return k(sigma, list(args)) #this is for probability distributions
 
 
-def hashmap(alpha, *args):
+def hashmap(sigma, alpha, *args):
     k = args[-1]
     args = args[:-1]
     new_map = {} #NOTE: also not persistent
@@ -86,32 +86,32 @@ def hashmap(alpha, *args):
         else:
             raise ValueError('Unkown key type, ', args[2*i])
         new_map[key] = args[2*i+1]
-    return k(new_map)
+    return k(sigma, new_map)
 
-def first(alpha, sequence, k):
-    return k(sequence[0])
+def first(sigma, alpha, sequence, k):
+    return k(sigma, sequence[0])
 
-def second(alpha, sequence, k):
-    return k(sequence[1])
+def second(sigma, alpha, sequence, k):
+    return k(sigma, sequence[1])
 
-def rest(alpha, sequence, k):
-    return k(sequence[1:])
+def rest(sigma, alpha, sequence, k):
+    return k(sigma, sequence[1:])
 
 
-def last(alpha, sequence, k):
-    return k(sequence[-1])
+def last(sigma, alpha, sequence, k):
+    return k(sigma, sequence[-1])
 
-def get(alpha, data, element, k):
+def get(sigma, alpha, data, element, k):
     if type(data) is dict:
         if type(element) is torch.Tensor:
             key = element.item()
         elif type(element) is str:
             key = element
-        return k(data[key])
+        return k(sigma, data[key])
     else:
-        return k(data[int(element)])
+        return k(sigma, data[int(element)])
 
-def put(alpha, data, element, value, k): #vector, index, value
+def put(sigma, alpha, data, element, value, k): #vector, index, value
     if type(data) is dict:
         newhashmap = data.copy() #NOTE: right now we're copying
         if type(element) is torch.Tensor:
@@ -119,13 +119,13 @@ def put(alpha, data, element, value, k): #vector, index, value
         elif type(element) is str:
             key = element
         newhashmap[key] = value
-        return k(newhashmap)
+        return k(sigma, newhashmap)
     else:
         newvector = data.clone() 
         newvector[int(element)] = value
-        return k(newvector)
+        return k(sigma, newvector)
 
-def remove(alpha, data, element, k):
+def remove(sigma, alpha, data, element, k):
     if type(data) is dict:
         newhashmap = data.copy()
         if type(element) is torch.Tensor:
@@ -133,43 +133,45 @@ def remove(alpha, data, element, k):
         elif type(element) is str:
             key = element
         _ = newhashmap.pop(key)        
-        return k(newhashmap)
+        return k(sigma, newhashmap)
     else:
         idx = int(element)
         newvector = torch.cat([data[0:idx],data[idx+1:]],dim=0)
-        return k(newvector)
+        return k(sigma, newvector)
     
-def append(alpha, data, value, k):
-    return k(torch.cat([data,torch.tensor([value])], dim=0))
+def append(sigma, alpha, data, value, k):
+    return k(sigma, torch.cat([data,torch.tensor([value])], dim=0))
 
-def is_empty(alpha, arg, k):
-    return k(len(arg) == 0)
+def is_empty(sigma, alpha, arg, k):
+    return k(sigma, len(arg) == 0)
 
-def peek(alpha, sequence, k): #NOTE: only defined for vector
-    return k(sequence[0])
+def peek(sigma, alpha, sequence, k): #NOTE: only defined for vector
+    return k(sigma, sequence[0])
 
-def conj(alpha, sequence, element, k):
+def conj(sigma, alpha, sequence, element, k):
     if type(sequence) is torch.Tensor:
-        return k(torch.cat((element.reshape(1), sequence)))
+        return k(sigma, torch.cat((element.reshape(1), sequence)))
     elif type(sequence) is list:
-        return k([element] + sequence)
+        return k(sigma, [element] + sequence)
 
 
-def mat_transpose(alpha, arg, k):
-    return k(torch.transpose(arg, 1, 0))
+def mat_transpose(sigma, alpha, arg, k):
+    return k(sigma, torch.transpose(arg, 1, 0))
 
-def mat_mul(alpha, arg0, arg1, k):
-    return k(torch.matmul(arg0,arg1))
+def mat_mul(sigma, alpha, arg0, arg1, k):
+    return k(sigma, torch.matmul(arg0,arg1))
     
-def mat_repmat(alpha, mat, dim, n, k):
+def mat_repmat(sigma, alpha, mat, dim, n, k):
     shape = [1,1]
     shape[int(dim)] = int(n)
-    return k(mat*torch.ones(tuple(shape)))
+    return k(sigma, mat*torch.ones(tuple(shape)))
 
 
-def push_addr(alpha, value, k):
+def push_addr(sigma, alpha, value, k):
+    # print("in push_addr", alpha, value, k)
+    # print("args", alpha, value, k)
     # print('pushing ', value, ' onto ', alpha)
-    return k(alpha + '_' + value)
+    return k(sigma, alpha + '_' + value)
 
 
 env = {

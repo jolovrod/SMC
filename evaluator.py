@@ -5,6 +5,8 @@ from daphne import daphne
 from pyrsistent import pmap, plist
 import numpy as np
 from tests import is_tol, run_prob_test,load_truth
+import sys
+import threading
 
 #these are adapted from Peter Norvig's Lispy
 class Env():
@@ -49,8 +51,13 @@ class Procedure(object):
     "A user-defined Scheme procedure."
     def __init__(self, parms, body, env):
         self.parms, self.body, self.env = parms, body, env
-    def __call__(self, *args):
-        return evaluate(self.body, Env(self.parms, args, self.env))
+    def __call__(self, sigma, *args):
+        # TODO: sigma needs to be passed because it could be updated. 
+        # print("in Proceedure call")
+        # print("args", args)
+        # print("\n\n\n")
+        # TODO: pass sigma correctly. 
+        return evaluate(self.body, sigma, Env(self.parms, args, self.env))
 
 
 def standard_env():
@@ -60,7 +67,7 @@ def standard_env():
 
 
 
-def evaluate(exp, env=None):
+def evaluate(exp, sigma, env=None):
 
     if env is None:
         env = standard_env()
@@ -69,38 +76,40 @@ def evaluate(exp, env=None):
     if type(exp) is list:
         op, *args = exp
         if op == 'sample':
-            alpha = evaluate(args[0], env=env)
-            d = evaluate(args[1], env=env)
+            alpha = evaluate(args[0], sigma, env=env)
+            d = evaluate(args[1], sigma, env=env)
             s = d.sample()
-            k = evaluate(args[2], env=env)
-            sigma = {'type' : 'sample'
-                     #TODO: put any other stuff you need here
-                     }
+            k = evaluate(args[2], sigma, env=env)
+            sigma['type'] = 'sample'
+            sigma['alpha'] = alpha
+            #TODO: put any other stuff you need here
             return k, [s], sigma
         elif op == 'observe':
-            alpha = evaluate(args[0], env=env)
-            d = evaluate(args[1], env=env)
-            c = evaluate(args[2], env=env)
-            k = evaluate(args[3], env=env)
-            sigma = {'type' : 'observe'
-                     #TODO: put any other stuff you need here
-                     }
+            alpha = evaluate(args[0], sigma, env=env)
+            d = evaluate(args[1], sigma, env=env)
+            c = evaluate(args[2], sigma, env=env)
+            k = evaluate(args[3], sigma, env=env)
+            sigma['type'] = 'observe'
+            sigma['logW'] = sigma['logW'] + d.log_prob(c)
+            sigma['alpha'] = alpha
+            #TODO: put any other stuff you need here
             return k, [c], sigma
         elif op == 'if':
             cond,conseq,alt = args
-            if evaluate(cond, env=env):
-                return evaluate(conseq, env=env)
+            if evaluate(cond, sigma, env=env):
+                return evaluate(conseq, sigma, env=env)
             else:
-                return evaluate(alt, env=env)
+                return evaluate(alt, sigma, env=env)
         elif op == 'fn': 
+            # Is always called from the func eval case (below)
             params, body = args #fn is:  ['fn', ['arg1','arg2','arg3'], body_exp]
             return Procedure(params, body, env)
         else: #func eval
-            proc = evaluate(op, env=env)
-            values = [evaluate(e, env=env) for e in args]
-            sigma = {'type' : 'proc'
-                     #TODO: put any other stuff you need here
-                     }
+            proc = evaluate(op, sigma, env=env)
+            values = [evaluate(e, sigma, env=env) for e in args]
+            sigma['type'] = 'proc'
+            #TODO: put any other stuff you need here
+            # this is the continuation that gets 
             return proc, values, sigma
     elif type(exp) is str:
         if exp[0] == "\"":  # strings have double, double quotes
@@ -117,13 +126,18 @@ def evaluate(exp, env=None):
 
 def sample_from_prior(exp):
     #init calc:
-    output = lambda x: x #The output is the identity
-    res =  evaluate(exp, env=None)('addr_start', output) #set up the initial call
+    output = lambda _,x: x # The output is the identity (also takes sigma as argument)
+    sigma = {'logW':0}
+    res =  evaluate(exp, sigma, env=None)(sigma, 'addr_start', output) #set up the initial call
     while type(res) is tuple: #if there are continuations, the res will be a tuple
-        cont, args, sigma = res #res is contininuation, arguments, and a map, which you can use to pass back some additional stuff
-        res = cont(*args) #call the continuation
+        cont, args, sig = res # res is contininuation, arguments, and a map, which you can use to pass back some additional stuff
+        res = cont(sigma, *args) #call the continuation
+        # continuation is a function
+        # function is called with the arguments. 
+        # TODO: add sigma to function call. 
     #when res is not a tuple, the calculation has finished
-    return res
+    # ie 
+    return res, sigma['logW']
 
 def get_stream(exp):
     while True:
@@ -134,13 +148,13 @@ def run_deterministic_tests(use_cache=True, cache='programs/tests/'):
 
     for i in range(1,15):
         if use_cache:
-            with open(cache + 'deterministic/test_{}.json'.format(i),'r') as f:
+            with open('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/deterministic/test_{}.daphne'.format(i),'r') as f:
                 exp = json.load(f)
         else:
-            exp = daphne(['desugar-hoppl-cps', '-i', '../../HW6/programs/tests/deterministic/test_{}.daphne'.format(i)])
-            with open(cache + 'deterministic/test_{}.json'.format(i),'w') as f:
+            exp = daphne(['desugar-hoppl-cps', '-i', 'C:/Users/jlovr/CS532-HW6/SMC/programs/tests/deterministic/test_{}.daphne'.format(i)])
+            with open('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/deterministic/test_{}.daphne'.format(i),'w') as f:
                 json.dump(exp, f)
-        truth = load_truth('programs/tests/deterministic/test_{}.truth'.format(i))
+        truth = load_truth('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/deterministic/test_{}.truth'.format(i))
         ret = sample_from_prior(exp)
         try:
             assert(is_tol(ret, truth))
@@ -152,14 +166,14 @@ def run_deterministic_tests(use_cache=True, cache='programs/tests/'):
 
     for i in range(1,13):
         if use_cache:
-            with open(cache + 'hoppl-deterministic/test_{}.json'.format(i),'r') as f:
+            with open('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/hoppl-deterministic/test_{}.daphne'.format(i),'r') as f:
                 exp = json.load(f)
         else:
-            exp = daphne(['desugar-hoppl-cps', '-i', '../../HW6/programs/tests/hoppl-deterministic/test_{}.daphne'.format(i)])
-            with open(cache + 'hoppl-deterministic/test_{}.json'.format(i),'w') as f:
+            exp = daphne(['desugar-hoppl-cps', '-i', 'C:/Users/jlovr/CS532-HW6/SMC/programs/tests/hoppl-deterministic/test_{}.daphne'.format(i)])
+            with open('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/hoppl-deterministic/test_{}.daphne'.format(i),'w') as f:
                 json.dump(exp, f)
 
-        truth = load_truth('programs/tests/hoppl-deterministic/test_{}.truth'.format(i))
+        truth = load_truth('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/hoppl-deterministic/test_{}.truth'.format(i))
         ret = sample_from_prior(exp)
 
         try:
@@ -180,13 +194,13 @@ def run_probabilistic_tests(use_cache=True, cache='programs/tests/'):
 
     for i in [1,2,3,4,6]: #test 5 does not work, sorry. 
         if use_cache:
-            with open(cache + 'probabilistic/test_{}.json'.format(i),'r') as f:
+            with open('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/probabilistic/test_{}.daphne'.format(i),'r') as f:
                 exp = json.load(f)
         else:
-            exp = daphne(['desugar-hoppl-cps', '-i', '../../HW6/programs/tests/probabilistic/test_{}.daphne'.format(i)])
-            with open(cache + 'probabilistic/test_{}.json'.format(i),'w') as f:
+            exp = daphne(['desugar-hoppl-cps', '-i', 'C:/Users/jlovr/CS532-HW6/SMC/programs/tests/probabilistic/test_{}.daphne'.format(i)])
+            with open('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/probabilistic/test_{}.daphne'.format(i),'w') as f:
                 json.dump(exp, f)
-        truth = load_truth('programs/tests/probabilistic/test_{}.truth'.format(i))
+        truth = load_truth('C:/Users/jlovr/CS532-HW6/SMC/programs/tests/probabilistic/test_{}.truth'.format(i))
 
         stream = get_stream(exp)
 
@@ -198,26 +212,46 @@ def run_probabilistic_tests(use_cache=True, cache='programs/tests/'):
     print('All probabilistic tests passed')
 
 
-if __name__ == '__main__':
+def my_main():
     # run the tests, if you wish:  
-   # run_deterministic_tests(use_cache=False)
-   # run_probabilistic_tests(use_cache=False)
+    
+    # run_deterministic_tests(use_cache=True)
+    # run_probabilistic_tests(use_cache=True)
 
-    #load your precompiled json's here:
-    with open('programs/{}.json'.format(4),'r') as f:
-        exp = json.load(f)
+    # compile json's here:
+    # for i in range(1,4):
+    #     exp = daphne(['desugar-hoppl-cps', '-i', 'C:/Users/jlovr/CS532-HW6/SMC/programs/{}.daphne'.format(i)])
+    #     with open('C:/Users/jlovr/CS532-HW6/SMC/programs/{}.daphne'.format(i),'w') as f:
+    #         json.dump(exp, f)
 
-    #this should run a sample from the prior
-    print(sample_from_prior(exp))
+
+    for i in range(1, 5):
+        #load your precompiled json's here:
+        with open('C:/Users/jlovr/CS532-HW6/SMC/programs/{}.daphne'.format(i),'r') as f:
+            exp = json.load(f)
 
 
-    #you can see how the CPS works here, you define a continuation for the last call:
-    output = lambda x: x #The output is the identity
+        #this should run a sample from the prior
+        print(sample_from_prior(exp))
 
-    res =  evaluate(exp, env=None)('addr_start', output) #set up the initial call, every evaluate returns a continuation, a set of arguments, and a map sigma at every procedure call, every sample, and every observe
-    cont, args, sigma = res
-    print(cont, args, sigma)
-    #you can keep calling this to run the program forward:
-    res = cont(*args)
-    #you know the program is done, when "res" is not a tuple, but a simple data object
+        # #you can see how the CPS works here, you define a continuation for the last call:
+        # output = lambda x: x #The output is the identity
+
+        # #set up the initial call, every evaluate returns a continuation, a set of arguments, and a map sigma at every procedure call, every sample, and every observe
+        # res =  evaluate(exp, {}, env=None)('addr_start', output) 
+        # cont, args, sigma = res
+        # print(cont, args, sigma)
+        # #you can keep calling this to run the program forward:
+        # res = cont(*args)
+
+        # #you know the program is done, when "res" is not a tuple, but a simple data object
+
+        print("\n\n\n")
+
+
+if __name__ == '__main__':
+    sys.setrecursionlimit(100000)
+    threading.stack_size(200000000)
+    thread = threading.Thread(target=my_main)
+    thread.start()     
 
